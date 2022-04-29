@@ -19,9 +19,9 @@
 package dev.kobalt.hsp2html.web.convert
 
 import dev.kobalt.hsp2html.web.resource.ResourceRepository
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withPermit
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
@@ -38,26 +38,41 @@ object ConvertRepository {
     var resourcePath: String? = null
     var fontPath: String? = null
 
-    private val semaphore = Semaphore(1)
+    private val semaphore = Semaphore(5)
+
+    suspend fun convert(data: String): String = withContext(Dispatchers.IO) {
+        val process = ProcessBuilder(
+            "java",
+            "-jar", jarPath!!,
+            "--resourcePath", resourcePath!!,
+            "--fontPath", fontPath!!
+        ).start()
+        val stdout = BufferedReader(InputStreamReader(process.inputStream))
+        val stderr = BufferedReader(InputStreamReader(process.errorStream))
+        val stdin = BufferedWriter(OutputStreamWriter(process.outputStream))
+        val stdinJob = launch(Dispatchers.IO) {
+            stdin.write(data)
+            stdin.flush()
+            stdin.close()
+        }
+        val stderrJob = launch(Dispatchers.IO) {
+            println(stderr.readText())
+        }
+        val stdoutJob = async(Dispatchers.IO) {
+            stdout.readText()
+        }
+        stdinJob.join()
+        stderrJob.join()
+        stdoutJob.await()
+    }
 
     suspend fun submit(data: String): String {
         return withContext(Dispatchers.IO) {
-            semaphore.acquire()
-            val process = ProcessBuilder(
-                "java",
-                "-jar", jarPath!!,
-                "--resourcePath", resourcePath!!,
-                "--fontPath", fontPath!!
-            ).start()
-            val stdout = BufferedReader(InputStreamReader(process.inputStream))
-            val stderr = BufferedReader(InputStreamReader(process.errorStream))
-            val stdin = BufferedWriter(OutputStreamWriter(process.outputStream))
-            stdin.apply { write(data); flush(); close(); }
-            var s: String?
-            val output = stdout.readText()
-            while (stderr.readLine().also { s = it } != null) println(s)
-            semaphore.release()
-            output
+            semaphore.withPermit {
+                withTimeout(5000) {
+                    convert(data)
+                }
+            }
         }
     }
 

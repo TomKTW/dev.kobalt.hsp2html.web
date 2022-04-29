@@ -6,7 +6,9 @@
 
 ### Limitations
 
-- This converter will work only with original resources from Hypnospace Outlaw 2.34.
+- This converter should work well only with original resources from Hypnospace Outlaw 2.34 or later.
+- Conversion process queue is set up to 5 simultaneous requests. If conversion process takes at least 5 seconds, the
+  result will time out.
 - Any custom resources may fail rendering the page.
 - Embedding music from HSM format is not implemented.
 - Some animations or visual effects might not be implemented properly.

@@ -27,6 +27,7 @@ import io.ktor.http.content.*
 import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.html.*
 
 fun Route.convertRoute() {
@@ -59,8 +60,7 @@ fun Route.convertRoute() {
                 val parts = call.receiveMultipart().readAllParts()
                 val part = parts.find { it.name == "input" } as? PartData.FileItem ?: throw Exception()
                 val data = LimitedSizeInputStream(part.streamProvider(), 500 * 1024).readBytes().decodeToString()
-                val output = ConvertRepository.submit(data)
-                call.respond(HtmlStringContent(HttpStatusCode.OK, output))
+                call.respond(HtmlStringContent(HttpStatusCode.OK, ConvertRepository.submit(data)))
             }.getOrElse {
                 call.respondHtmlContent(
                     title = ConvertRepository.pageTitle,
@@ -72,6 +72,9 @@ fun Route.convertRoute() {
                     ) {
                         h3 { text("Failure") }
                         p { text("Conversion process was not successful.") }
+                        if (it is TimeoutCancellationException) {
+                            p { text("The process took too long to convert as the server is most likely overloaded. You could try again later or download converter locally, which might be preferred if this is not functional.") }
+                        }
                     }
                 }
             }
